@@ -60,6 +60,28 @@
       line-height: 1.2;
     }
 
+    .metaRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .metaRow h1 {
+      margin: 0;
+    }
+
+    .versionTag {
+      flex: 0 0 auto;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(111, 211, 255, 0.14);
+      color: var(--accent);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+
     p {
       margin: 0 0 12px;
       font-size: 13px;
@@ -134,7 +156,10 @@
 </head>
 <body>
   <div id="ui">
-    <h1>Vision Pro 360 Panorama Viewer</h1>
+    <div class="metaRow">
+      <h1>Vision Pro 360 Panorama Viewer</h1>
+      <div class="versionTag" id="versionTag">v1.0.3</div>
+    </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
       designed for Safari on Apple Vision Pro and keeps the image local in the browser.
@@ -176,9 +201,10 @@
       radius="5000"
       segments-width="64"
       segments-height="64"
+      scale="-1 1 1"
       rotation="0 -90 0"
       color="#111111"
-      material="shader: flat; side: double"
+      material="shader: flat; side: front"
     ></a-sphere>
 
     <!--
@@ -210,10 +236,12 @@
     const skySphere = document.getElementById("skySphere");
     const panoCanvas = document.getElementById("panoCanvas");
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
+    const versionTag = document.getElementById("versionTag");
 
     let currentImageBitmap = null;
     let currentFileObjectUrl = null;
     let maxTextureSize = 4096;
+    const APP_VERSION = "v1.0.3";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -452,6 +480,8 @@
     });
 
     setOrientationStatus("Awaiting user action");
+    versionTag.textContent = APP_VERSION;
+    console.log("[app] Version", APP_VERSION);
     scene.addEventListener("loaded", detectMaxTextureSize, { once: true });
     checkXrAvailability();
   </script>

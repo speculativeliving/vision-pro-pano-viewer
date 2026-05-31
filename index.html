@@ -158,10 +158,6 @@
     xr-mode-ui="enabled: false"
     webxr="optionalFeatures: local-floor, bounded-floor, hand-tracking; overlayElement: #ui"
   >
-    <a-assets>
-      <img id="panoImage" alt="Panorama source" />
-    </a-assets>
-
     <!--
       Vision Pro note:
       We use a-sky to map a 2:1 equirectangular texture to the inside of a large sphere.
@@ -195,10 +191,10 @@
     const imageStatus = document.getElementById("imageStatus");
     const ui = document.getElementById("ui");
     const scene = document.getElementById("scene");
-    const panoImage = document.getElementById("panoImage");
     const sky = document.getElementById("sky");
 
     let currentObjectUrl = null;
+    let currentImage = null;
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -213,6 +209,16 @@
     function setImageStatus(message, isError) {
       imageStatus.textContent = message;
       console[isError ? "error" : "log"]("[image]", message);
+    }
+
+    function applySkyTexture(url) {
+      sky.removeAttribute("src");
+      sky.setAttribute("src", url);
+      const material = sky.components.material && sky.components.material.material;
+      if (material) {
+        material.needsUpdate = true;
+      }
+      console.log("[image] Applied sky texture URL directly");
     }
 
     async function checkXrAvailability() {
@@ -284,25 +290,26 @@
       }
 
       currentObjectUrl = URL.createObjectURL(file);
+      currentImage = new Image();
       setImageStatus("Loading " + file.name + "...");
 
-      panoImage.onload = () => {
-        sky.setAttribute("src", "#panoImage");
+      currentImage.onload = () => {
+        applySkyTexture(currentObjectUrl);
         setImageStatus(
           "Loaded " +
             file.name +
             " at " +
-            panoImage.naturalWidth +
+            currentImage.naturalWidth +
             "x" +
-            panoImage.naturalHeight
+            currentImage.naturalHeight
         );
       };
 
-      panoImage.onerror = () => {
+      currentImage.onerror = () => {
         setImageStatus("Failed to decode image: " + file.name, true);
       };
 
-      panoImage.src = currentObjectUrl;
+      currentImage.src = currentObjectUrl;
     });
 
     permissionButton.addEventListener("click", requestOrientationPermission);
@@ -321,6 +328,11 @@
 
     scene.addEventListener("enter-vr", () => {
       setXrStatus("Scene entered XR / immersive mode");
+      if (currentObjectUrl) {
+        applySkyTexture(currentObjectUrl);
+      } else {
+        console.log("[image] No panorama selected when entering XR");
+      }
     });
 
     scene.addEventListener("exit-vr", () => {

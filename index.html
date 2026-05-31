@@ -126,6 +126,10 @@
     #showUiButton.visible {
       display: inline-flex;
     }
+
+    #panoCanvas {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -137,6 +141,7 @@
     </p>
     <div class="controls">
       <input id="fileInput" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
+      <button id="demoButton" type="button">Load Demo Panorama</button>
       <button id="permissionButton" type="button">Request Motion Permission</button>
       <button id="xrButton" type="button">Enter XR / Immersive Mode</button>
       <button id="hideUiButton" type="button">Hide Controls</button>
@@ -149,6 +154,7 @@
   </div>
 
   <button id="showUiButton" type="button">Show Controls</button>
+  <canvas id="panoCanvas"></canvas>
 
   <a-scene
     id="scene"
@@ -160,11 +166,21 @@
   >
     <!--
       Vision Pro note:
-      We use a-sky to map a 2:1 equirectangular texture to the inside of a large sphere.
-      This is still a web page, not a native visionOS ImmersiveSpace, so sharpness and
-      motion behavior can differ from a RealityKit app.
+      We draw the panorama into a canvas first, then use that canvas as the sphere texture.
+      This avoids some object-URL and texture-refresh issues that can show up in immersive
+      browser mode. We also clamp large images to the device's max texture size because
+      very large panoramas can otherwise fail silently and appear black.
     -->
-    <a-sky id="sky" color="#111111" radius="5000" rotation="0 -90 0"></a-sky>
+    <a-sphere
+      id="skySphere"
+      radius="5000"
+      segments-width="64"
+      segments-height="64"
+      scale="-1 1 1"
+      rotation="0 -90 0"
+      color="#111111"
+      material="shader: flat; side: back"
+    ></a-sphere>
 
     <!--
       Vision Pro and Mobile Safari note:
@@ -182,6 +198,7 @@
 
   <script>
     const fileInput = document.getElementById("fileInput");
+    const demoButton = document.getElementById("demoButton");
     const permissionButton = document.getElementById("permissionButton");
     const xrButton = document.getElementById("xrButton");
     const hideUiButton = document.getElementById("hideUiButton");
@@ -191,10 +208,12 @@
     const imageStatus = document.getElementById("imageStatus");
     const ui = document.getElementById("ui");
     const scene = document.getElementById("scene");
-    const sky = document.getElementById("sky");
+    const skySphere = document.getElementById("skySphere");
+    const panoCanvas = document.getElementById("panoCanvas");
+    const panoContext = panoCanvas.getContext("2d", { alpha: false });
 
-    let currentObjectUrl = null;
-    let currentImage = null;
+    let currentImageBitmap = null;
+    let maxTextureSize = 4096;
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -211,14 +230,87 @@
       console[isError ? "error" : "log"]("[image]", message);
     }
 
-    function applySkyTexture(url) {
-      sky.removeAttribute("src");
-      sky.setAttribute("src", url);
-      const material = sky.components.material && sky.components.material.material;
+    function updateMaterialFromCanvas() {
+      skySphere.setAttribute("material", "src", "#panoCanvas");
+      const material = skySphere.components.material && skySphere.components.material.material;
       if (material) {
         material.needsUpdate = true;
+        if (material.map) {
+          material.map.needsUpdate = true;
+        }
       }
-      console.log("[image] Applied sky texture URL directly");
+      console.log("[image] Applied canvas texture to sphere");
+    }
+
+    function fitPanoramaToTextureLimit(width, height, limit) {
+      const longestEdge = Math.max(width, height);
+      if (longestEdge <= limit) {
+        return { width, height, scaled: false };
+      }
+
+      const scale = limit / longestEdge;
+      return {
+        width: Math.max(2, Math.floor(width * scale)),
+        height: Math.max(2, Math.floor(height * scale)),
+        scaled: true
+      };
+    }
+
+    function renderPanoramaToCanvas(image) {
+      const target = fitPanoramaToTextureLimit(
+        image.naturalWidth,
+        image.naturalHeight,
+        maxTextureSize
+      );
+
+      panoCanvas.width = target.width;
+      panoCanvas.height = target.height;
+      panoContext.clearRect(0, 0, target.width, target.height);
+      panoContext.drawImage(image, 0, 0, target.width, target.height);
+      updateMaterialFromCanvas();
+
+      if (target.scaled) {
+        setImageStatus(
+          "Loaded " +
+            image.dataset.filename +
+            " at " +
+            image.naturalWidth +
+            "x" +
+            image.naturalHeight +
+            ", scaled to " +
+            target.width +
+            "x" +
+            target.height +
+            " for device texture limits"
+        );
+      } else {
+        setImageStatus(
+          "Loaded " +
+            image.dataset.filename +
+            " at " +
+            image.naturalWidth +
+            "x" +
+            image.naturalHeight
+        );
+      }
+    }
+
+    function loadPanoramaFromUrl(url, filename) {
+      setImageStatus("Loading " + filename + "...");
+
+      const image = new Image();
+      image.dataset.filename = filename;
+
+      image.onload = () => {
+        renderPanoramaToCanvas(image);
+        currentImageBitmap = image;
+      };
+
+      image.onerror = () => {
+        setImageStatus("Failed to decode image: " + filename, true);
+      };
+
+      image.src = url;
     }
 
     async function checkXrAvailability() {
@@ -263,6 +355,21 @@
       setOrientationStatus("Explicit permission request not required on this browser");
     }
 
+    function detectMaxTextureSize() {
+      const renderer =
+        scene.renderer ||
+        (scene.canvas && (scene.canvas.getContext("webgl2") || scene.canvas.getContext("webgl")));
+
+      const gl =
+        renderer && renderer.getContext ? renderer.getContext() : renderer;
+
+      if (gl) {
+        maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) || maxTextureSize;
+      }
+
+      console.log("[image] MAX_TEXTURE_SIZE =", maxTextureSize);
+    }
+
     function hideUi() {
       ui.classList.add("hidden");
       showUiButton.classList.add("visible");
@@ -285,31 +392,21 @@
         return;
       }
 
-      if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
-      }
+      const reader = new FileReader();
 
-      currentObjectUrl = URL.createObjectURL(file);
-      currentImage = new Image();
-      setImageStatus("Loading " + file.name + "...");
-
-      currentImage.onload = () => {
-        applySkyTexture(currentObjectUrl);
-        setImageStatus(
-          "Loaded " +
-            file.name +
-            " at " +
-            currentImage.naturalWidth +
-            "x" +
-            currentImage.naturalHeight
-        );
+      reader.onerror = () => {
+        setImageStatus("Failed to read file: " + file.name, true);
       };
 
-      currentImage.onerror = () => {
-        setImageStatus("Failed to decode image: " + file.name, true);
+      reader.onload = () => {
+        loadPanoramaFromUrl(reader.result, file.name);
       };
 
-      currentImage.src = currentObjectUrl;
+      reader.readAsDataURL(file);
+    });
+
+    demoButton.addEventListener("click", () => {
+      loadPanoramaFromUrl("./demo-panorama.png", "demo-panorama.png");
     });
 
     permissionButton.addEventListener("click", requestOrientationPermission);
@@ -328,8 +425,8 @@
 
     scene.addEventListener("enter-vr", () => {
       setXrStatus("Scene entered XR / immersive mode");
-      if (currentObjectUrl) {
-        applySkyTexture(currentObjectUrl);
+      if (currentImageBitmap) {
+        renderPanoramaToCanvas(currentImageBitmap);
       } else {
         console.log("[image] No panorama selected when entering XR");
       }
@@ -340,6 +437,7 @@
     });
 
     setOrientationStatus("Awaiting user action");
+    scene.addEventListener("loaded", detectMaxTextureSize, { once: true });
     checkXrAvailability();
   </script>
 </body>

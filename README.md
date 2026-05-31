@@ -2,10 +2,14 @@
 
 Simple A-Frame 1.6.0 panorama viewer for GitHub Pages, intended to be opened over HTTPS in Safari on Apple Vision Pro.
 
+Included test asset:
+
+- `demo-panorama.png` is a bundled 2:1 panorama you can load with the on-page `Load Demo Panorama` button to verify that the viewer works before testing your own file.
+
 ## Setup
 
 1. Create a GitHub repository named `vision-pro-pano-viewer`.
-2. Upload `index.html` and `README.md` to the repository root on the `main` branch.
+2. Upload `index.html`, `README.md`, and `demo-panorama.png` to the repository root on the `main` branch.
 3. In GitHub, open `Settings` -> `Pages`.
 4. Under `Build and deployment`, set `Source` to `Deploy from a branch`.
 5. Choose the `main` branch and the `/ (root)` folder, then save.
@@ -16,10 +20,11 @@ Simple A-Frame 1.6.0 panorama viewer for GitHub Pages, intended to be opened ove
 ## Vision Pro Workflow
 
 1. Open the GitHub Pages URL in Safari on Apple Vision Pro.
-2. Choose a local JPG or PNG panorama.
-3. Grant motion/orientation permission if Safari prompts for it.
-4. Enter XR / immersive mode if the browser reports that it is available.
-5. Compare sharpness and viewing behavior against your native RealityKit app.
+2. First try `Load Demo Panorama` to confirm the viewer itself is working.
+3. Then choose a local JPG or PNG panorama.
+4. Grant motion/orientation permission if Safari prompts for it.
+5. Enter XR / immersive mode if the browser reports that it is available.
+6. Compare sharpness and viewing behavior against your native RealityKit app.
 
 ## Notes
 

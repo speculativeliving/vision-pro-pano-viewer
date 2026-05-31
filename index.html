@@ -181,7 +181,7 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v1.0.6</div>
+      <div class="versionTag" id="versionTag">v1.1.2</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
@@ -207,6 +207,7 @@
 
   <button id="showUiButton" type="button">Show Controls</button>
   <canvas id="panoCanvas"></canvas>
+  <img id="xrSkyImage" alt="XR sky texture" hidden />
 
   <a-scene
     id="scene"
@@ -218,10 +219,9 @@
   >
     <!--
       Vision Pro note:
-      We draw the panorama into a canvas first, then use that canvas as the sphere texture.
-      This avoids some object-URL and texture-refresh issues that can show up in immersive
-      browser mode. We also clamp large images to the device's max texture size because
-      very large panoramas can otherwise fail silently and appear black.
+      We use a live canvas texture for the normal preview because that path is reliable.
+      We also prepare a frozen snapshot image separately so XR can try a more conservative
+      texture handoff without breaking the preview renderer.
     -->
     <a-sky
       id="sky"
@@ -260,6 +260,7 @@
     const sky = document.getElementById("sky");
     const panoCanvas = document.getElementById("panoCanvas");
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
+    const xrSkyImage = document.getElementById("xrSkyImage");
     const versionTag = document.getElementById("versionTag");
     const previewFrame = document.getElementById("previewFrame");
     const debugPreview = document.getElementById("debugPreview");
@@ -267,8 +268,9 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
+    let currentSkyDataUrl = null;
     let panoTexture = null;
-    const APP_VERSION = "v1.1.0";
+    const APP_VERSION = "v1.1.2";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -306,7 +308,7 @@
       return true;
     }
 
-    function updateMaterialFromCanvas() {
+    function updatePreviewFromCanvas() {
       if (!ensureCanvasTexture()) {
         return;
       }
@@ -319,7 +321,13 @@
         mesh.material.needsUpdate = true;
       }
 
-      console.log("[image] Updated direct CanvasTexture on sky");
+      console.log("[image] Updated live preview texture from canvas");
+    }
+
+    function updateXrSnapshotFromCanvas() {
+      currentSkyDataUrl = panoCanvas.toDataURL("image/jpeg", 0.92);
+      xrSkyImage.src = currentSkyDataUrl;
+      console.log("[image] Prepared XR snapshot from canvas");
     }
 
     function getSourceWidth(source) {
@@ -364,7 +372,8 @@
       panoContext.scale(-1, 1);
       panoContext.drawImage(image, 0, 0, target.width, target.height);
       panoContext.restore();
-      updateMaterialFromCanvas();
+      updatePreviewFromCanvas();
+      updateXrSnapshotFromCanvas();
 
       if (target.scaled) {
         setImageStatus(
@@ -541,10 +550,17 @@
 
     scene.addEventListener("enter-vr", () => {
       setXrStatus("Scene entered XR / immersive mode");
+      if (currentSkyDataUrl) {
+        sky.setAttribute("material", "color", "#ffffff");
+        sky.setAttribute("src", currentSkyDataUrl);
+        console.log("[image] Applied frozen XR snapshot on XR entry");
+      }
       if (currentImageElement) {
-        renderPanoramaToCanvas(currentImageElement);
         window.setTimeout(() => {
-          renderPanoramaToCanvas(currentImageElement);
+          if (currentSkyDataUrl) {
+            sky.setAttribute("src", currentSkyDataUrl);
+            console.log("[image] Reapplied frozen XR snapshot after settle");
+          }
         }, 250);
       } else {
         console.log("[image] No panorama selected when entering XR");
@@ -553,6 +569,10 @@
 
     scene.addEventListener("exit-vr", () => {
       setXrStatus("Scene exited XR / immersive mode");
+      sky.removeAttribute("src");
+      if (currentImageElement) {
+        renderPanoramaToCanvas(currentImageElement);
+      }
     });
 
     setOrientationStatus("Awaiting user action");

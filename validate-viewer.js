@@ -20,7 +20,7 @@ async function main() {
   );
   await page.screenshot({ path: "validation-demo.png", fullPage: true });
 
-  await page.setInputFiles("#fileInput", "./demo-panorama.png");
+  await page.setInputFiles("#fileInput", "./Panorama1.jpg");
   await page.waitForTimeout(1500);
   const uploadStatus = await page.locator("#imageStatus").textContent();
   await page.screenshot({ path: "validation-upload.png", fullPage: true });

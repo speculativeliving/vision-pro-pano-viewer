@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>Vision Pro Panorama Viewer</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel-bg: rgba(12, 18, 28, 0.78);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --button-bg: rgba(255, 255, 255, 0.14);
+      --button-bg-hover: rgba(255, 255, 255, 0.24);
+      --text-main: #f4f7fb;
+      --text-muted: rgba(244, 247, 251, 0.78);
+      --accent: #6fd3ff;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top, rgba(18, 43, 61, 0.9), transparent 45%),
+        linear-gradient(180deg, #071018 0%, #020409 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      position: relative;
+    }
+
+    #ui {
+      position: fixed;
+      inset: 16px auto auto 16px;
+      z-index: 20;
+      width: min(440px, calc(100vw - 32px));
+      padding: 16px;
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      background: var(--panel-bg);
+      color: var(--text-main);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    #ui.hidden {
+      display: none;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    p {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-muted);
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      color: var(--text-main);
+      font-size: 14px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: var(--button-bg);
+      color: var(--text-main);
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    button:hover,
+    button:focus-visible {
+      background: var(--button-bg-hover);
+      outline: none;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+
+    #status strong {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #showUiButton {
+      position: fixed;
+      z-index: 15;
+      right: 16px;
+      bottom: 16px;
+      display: none;
+    }
+
+    #showUiButton.visible {
+      display: inline-flex;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1>Vision Pro 360 Panorama Viewer</h1>
+    <p>
+      Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
+      designed for Safari on Apple Vision Pro and keeps the image local in the browser.
+    </p>
+    <div class="controls">
+      <input id="fileInput" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
+      <button id="permissionButton" type="button">Request Motion Permission</button>
+      <button id="xrButton" type="button">Enter XR / Immersive Mode</button>
+      <button id="hideUiButton" type="button">Hide Controls</button>
+    </div>
+    <div id="status">
+      <div><strong>Orientation:</strong> <span id="orientationStatus">Not checked</span></div>
+      <div><strong>XR:</strong> <span id="xrStatus">Checking support...</span></div>
+      <div><strong>Image:</strong> <span id="imageStatus">No panorama loaded</span></div>
+    </div>
+  </div>
+
+  <button id="showUiButton" type="button">Show Controls</button>
+
+  <a-scene
+    id="scene"
+    embedded
+    background="color: #000000"
+    renderer="antialias: true; colorManagement: true"
+    xr-mode-ui="enabled: false"
+    webxr="optionalFeatures: local-floor, bounded-floor, hand-tracking; overlayElement: #ui"
+  >
+    <a-assets>
+      <img id="panoImage" alt="Panorama source" />
+    </a-assets>
+
+    <!--
+      Vision Pro note:
+      We use a-sky to map a 2:1 equirectangular texture to the inside of a large sphere.
+      This is still a web page, not a native visionOS ImmersiveSpace, so sharpness and
+      motion behavior can differ from a RealityKit app.
+    -->
+    <a-sky id="sky" color="#111111" radius="5000" rotation="0 -90 0"></a-sky>
+
+    <!--
+      Vision Pro and Mobile Safari note:
+      look-controls with magicWindowTrackingEnabled allows device/head orientation tracking
+      when the browser exposes it. Some Apple platforms require a user gesture before
+      DeviceOrientation data is available, which is why the permission button exists.
+    -->
+    <a-camera
+      id="camera"
+      position="0 1.6 0"
+      look-controls="enabled: true; magicWindowTrackingEnabled: true; pointerLockEnabled: false; mouseEnabled: true; touchEnabled: true"
+      wasd-controls="enabled: false"
+    ></a-camera>
+  </a-scene>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const permissionButton = document.getElementById("permissionButton");
+    const xrButton = document.getElementById("xrButton");
+    const hideUiButton = document.getElementById("hideUiButton");
+    const showUiButton = document.getElementById("showUiButton");
+    const orientationStatus = document.getElementById("orientationStatus");
+    const xrStatus = document.getElementById("xrStatus");
+    const imageStatus = document.getElementById("imageStatus");
+    const ui = document.getElementById("ui");
+    const scene = document.getElementById("scene");
+    const panoImage = document.getElementById("panoImage");
+    const sky = document.getElementById("sky");
+
+    let currentObjectUrl = null;
+
+    function setOrientationStatus(message) {
+      orientationStatus.textContent = message;
+      console.log("[orientation]", message);
+    }
+
+    function setXrStatus(message) {
+      xrStatus.textContent = message;
+      console.log("[xr]", message);
+    }
+
+    function setImageStatus(message, isError) {
+      imageStatus.textContent = message;
+      console[isError ? "error" : "log"]("[image]", message);
+    }
+
+    async function checkXrAvailability() {
+      if (!navigator.xr || !navigator.xr.isSessionSupported) {
+        xrButton.disabled = true;
+        setXrStatus("WebXR API not available in this browser");
+        return;
+      }
+
+      try {
+        const immersiveVrSupported = await navigator.xr.isSessionSupported("immersive-vr");
+        if (immersiveVrSupported) {
+          xrButton.disabled = false;
+          setXrStatus("immersive-vr is supported");
+          return;
+        }
+
+        xrButton.disabled = true;
+        setXrStatus("WebXR present, but immersive-vr is not supported");
+      } catch (error) {
+        xrButton.disabled = true;
+        setXrStatus("Failed to query XR support: " + error.message);
+      }
+    }
+
+    async function requestOrientationPermission() {
+      if (typeof DeviceOrientationEvent === "undefined") {
+        setOrientationStatus("DeviceOrientationEvent is not available");
+        return;
+      }
+
+      if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        try {
+          const result = await DeviceOrientationEvent.requestPermission();
+          setOrientationStatus("Permission request result: " + result);
+        } catch (error) {
+          setOrientationStatus("Permission request failed: " + error.message);
+        }
+        return;
+      }
+
+      setOrientationStatus("Explicit permission request not required on this browser");
+    }
+
+    function hideUi() {
+      ui.classList.add("hidden");
+      showUiButton.classList.add("visible");
+    }
+
+    function showUi() {
+      ui.classList.remove("hidden");
+      showUiButton.classList.remove("visible");
+    }
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        return;
+      }
+
+      const isSupportedImage = ["image/jpeg", "image/png"].includes(file.type);
+      if (!isSupportedImage) {
+        setImageStatus("Unsupported file type: " + (file.type || "unknown"), true);
+        return;
+      }
+
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+
+      currentObjectUrl = URL.createObjectURL(file);
+      setImageStatus("Loading " + file.name + "...");
+
+      panoImage.onload = () => {
+        sky.setAttribute("src", "#panoImage");
+        setImageStatus(
+          "Loaded " +
+            file.name +
+            " at " +
+            panoImage.naturalWidth +
+            "x" +
+            panoImage.naturalHeight
+        );
+      };
+
+      panoImage.onerror = () => {
+        setImageStatus("Failed to decode image: " + file.name, true);
+      };
+
+      panoImage.src = currentObjectUrl;
+    });
+
+    permissionButton.addEventListener("click", requestOrientationPermission);
+
+    xrButton.addEventListener("click", async () => {
+      try {
+        await scene.enterVR();
+        setXrStatus("Requested XR / immersive mode");
+      } catch (error) {
+        setXrStatus("Failed to enter XR mode: " + error.message);
+      }
+    });
+
+    hideUiButton.addEventListener("click", hideUi);
+    showUiButton.addEventListener("click", showUi);
+
+    scene.addEventListener("enter-vr", () => {
+      setXrStatus("Scene entered XR / immersive mode");
+    });
+
+    scene.addEventListener("exit-vr", () => {
+      setXrStatus("Scene exited XR / immersive mode");
+    });
+
+    setOrientationStatus("Awaiting user action");
+    checkXrAvailability();
+  </script>
+</body>
+</html>

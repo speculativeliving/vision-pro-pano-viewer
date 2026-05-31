@@ -6,16 +6,6 @@ Included test asset:
 
 - `demo-panorama.png` is a bundled 2:1 panorama you can load with the on-page `Load Demo Panorama` button to verify that the viewer works before testing your own file.
 
-## Setup
-
-1. Create a GitHub repository named `vision-pro-pano-viewer`.
-2. Upload `index.html`, `README.md`, and `demo-panorama.png` to the repository root on the `main` branch.
-3. In GitHub, open `Settings` -> `Pages`.
-4. Under `Build and deployment`, set `Source` to `Deploy from a branch`.
-5. Choose the `main` branch and the `/ (root)` folder, then save.
-6. Visit:
-
-   `https://USERNAME.github.io/vision-pro-pano-viewer/`
 
 ## Vision Pro Workflow
 

@@ -181,24 +181,23 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v1.1.5</div>
+      <div class="versionTag" id="versionTag">v2.0.0</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
       designed for Safari on Apple Vision Pro and keeps the image local in the browser.
+      Immersive XR mode has been removed here to keep the viewer stable and predictable.
     </p>
     <div class="controls">
       <input id="fileInput" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
       <button id="demoButton" type="button">Load Demo Panorama</button>
-      <button id="xrSmokeButton" type="button">XR Smoke Test</button>
       <button id="permissionButton" type="button">Request Motion Permission</button>
-      <button id="resetViewButton" type="button">Reset View</button>
-      <button id="xrButton" type="button">Enter XR / Immersive Mode</button>
+      <button id="resetViewButton" type="button">Recenter View</button>
       <button id="hideUiButton" type="button">Hide Controls</button>
     </div>
     <div id="status">
       <div><strong>Orientation:</strong> <span id="orientationStatus">Not checked</span></div>
-      <div><strong>XR:</strong> <span id="xrStatus">Checking support...</span></div>
+      <div><strong>Mode:</strong> <span id="xrStatus">Non-immersive Safari viewer</span></div>
       <div><strong>Image:</strong> <span id="imageStatus">No panorama loaded</span></div>
     </div>
     <div id="previewFrame">
@@ -209,7 +208,6 @@
 
   <button id="showUiButton" type="button">Show Controls</button>
   <canvas id="panoCanvas"></canvas>
-  <img id="xrSkyImage" alt="XR sky texture" hidden />
 
   <a-scene
     id="scene"
@@ -217,13 +215,11 @@
     background="color: #000000"
     renderer="antialias: true; colorManagement: true"
     xr-mode-ui="enabled: false"
-    webxr="optionalFeatures: local-floor, bounded-floor, hand-tracking; overlayElement: #ui"
   >
     <!--
       Vision Pro note:
-      We use a live canvas texture for the normal preview because that path is reliable.
-      We also prepare a frozen snapshot image separately so XR can try a more conservative
-      texture handoff without breaking the preview renderer.
+      This viewer is intentionally optimized for stable non-immersive browser preview
+      rather than Safari immersive mode, which is currently unreliable for this workflow.
     -->
     <a-sky
       id="sky"
@@ -250,10 +246,8 @@
   <script>
     const fileInput = document.getElementById("fileInput");
     const demoButton = document.getElementById("demoButton");
-    const xrSmokeButton = document.getElementById("xrSmokeButton");
     const permissionButton = document.getElementById("permissionButton");
     const resetViewButton = document.getElementById("resetViewButton");
-    const xrButton = document.getElementById("xrButton");
     const hideUiButton = document.getElementById("hideUiButton");
     const showUiButton = document.getElementById("showUiButton");
     const orientationStatus = document.getElementById("orientationStatus");
@@ -265,7 +259,6 @@
     const cameraEl = document.getElementById("camera");
     const panoCanvas = document.getElementById("panoCanvas");
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
-    const xrSkyImage = document.getElementById("xrSkyImage");
     const versionTag = document.getElementById("versionTag");
     const previewFrame = document.getElementById("previewFrame");
     const debugPreview = document.getElementById("debugPreview");
@@ -273,20 +266,17 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
-    let currentSkyDataUrl = null;
     let panoTexture = null;
-    let isInXrMode = false;
-    let xrSmokeMode = false;
-    const APP_VERSION = "v1.1.5";
+    const APP_VERSION = "v2.0.0";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
       console.log("[orientation]", message);
     }
 
-    function setXrStatus(message) {
+    function setModeStatus(message) {
       xrStatus.textContent = message;
-      console.log("[xr]", message);
+      console.log("[mode]", message);
     }
 
     function setImageStatus(message, isError) {
@@ -320,7 +310,6 @@
         return;
       }
 
-      sky.removeAttribute("src");
       panoTexture.needsUpdate = true;
       const mesh = sky.getObject3D("mesh");
       if (mesh && mesh.material) {
@@ -330,42 +319,6 @@
       }
 
       console.log("[image] Updated live preview texture from canvas");
-    }
-
-    function updateXrSnapshotFromCanvas() {
-      currentSkyDataUrl = panoCanvas.toDataURL("image/jpeg", 0.92);
-      xrSkyImage.src = currentSkyDataUrl;
-      console.log("[image] Prepared XR snapshot from canvas");
-    }
-
-    function applyXrSnapshotToSky() {
-      if (!currentSkyDataUrl || !xrSkyImage.src) {
-        console.log("[image] XR snapshot not ready yet");
-        return;
-      }
-
-      const mesh = sky.getObject3D("mesh");
-      if (mesh && mesh.material) {
-        mesh.material.map = null;
-        mesh.material.color.set("#ffffff");
-        mesh.material.needsUpdate = true;
-      }
-
-      sky.setAttribute("material", "color", "#ffffff");
-      sky.setAttribute("src", "#xrSkyImage");
-      console.log("[image] Applied XR snapshot image element to sky");
-    }
-
-    function restorePreviewAfterXr() {
-      xrSmokeMode = false;
-      sky.removeAttribute("src");
-      if (currentImageElement) {
-        renderPanoramaToCanvas(currentImageElement);
-        window.setTimeout(() => {
-          renderPanoramaToCanvas(currentImageElement);
-          console.log("[image] Reapplied preview texture after XR exit settle");
-        }, 100);
-      }
     }
 
     function getSourceWidth(source) {
@@ -410,10 +363,7 @@
       panoContext.scale(-1, 1);
       panoContext.drawImage(image, 0, 0, target.width, target.height);
       panoContext.restore();
-      if (!isInXrMode) {
-        updatePreviewFromCanvas();
-      }
-      updateXrSnapshotFromCanvas();
+      updatePreviewFromCanvas();
 
       if (target.scaled) {
         setImageStatus(
@@ -483,26 +433,7 @@
     }
 
     async function checkXrAvailability() {
-      if (!navigator.xr || !navigator.xr.isSessionSupported) {
-        xrButton.disabled = true;
-        setXrStatus("WebXR API not available in this browser");
-        return;
-      }
-
-      try {
-        const immersiveVrSupported = await navigator.xr.isSessionSupported("immersive-vr");
-        if (immersiveVrSupported) {
-          xrButton.disabled = false;
-          setXrStatus("immersive-vr is supported");
-          return;
-        }
-
-        xrButton.disabled = true;
-        setXrStatus("WebXR present, but immersive-vr is not supported");
-      } catch (error) {
-        xrButton.disabled = true;
-        setXrStatus("Failed to query XR support: " + error.message);
-      }
+      setModeStatus("Non-immersive Safari viewer");
     }
 
     async function requestOrientationPermission() {
@@ -539,19 +470,6 @@
       console.log("[image] MAX_TEXTURE_SIZE =", maxTextureSize);
     }
 
-    function applyDirectDemoSky() {
-      const mesh = sky.getObject3D("mesh");
-      if (mesh && mesh.material) {
-        mesh.material.map = null;
-        mesh.material.color.set("#ffffff");
-        mesh.material.needsUpdate = true;
-      }
-
-      sky.setAttribute("material", "color", "#ffffff");
-      sky.setAttribute("src", "./demo-panorama.png");
-      console.log("[image] Applied direct demo sky for XR smoke test");
-    }
-
     function resetView() {
       if (cameraEl.object3D) {
         cameraEl.object3D.rotation.set(0, 0, 0);
@@ -572,7 +490,7 @@
         }
       }
 
-      setOrientationStatus("View reset to forward horizon");
+      setOrientationStatus("View recentered to forward horizon");
       console.log("[orientation] Reset view requested");
     }
 
@@ -608,68 +526,18 @@
     });
 
     demoButton.addEventListener("click", () => {
-      xrSmokeMode = false;
       loadPanoramaFromUrl("./demo-panorama.png", "demo-panorama.png");
-    });
-
-    xrSmokeButton.addEventListener("click", async () => {
-      try {
-        xrSmokeMode = true;
-        setImageStatus("Running XR smoke test with direct demo image...");
-        applyDirectDemoSky();
-        await scene.enterVR();
-        setXrStatus("Requested XR smoke test");
-      } catch (error) {
-        xrSmokeMode = false;
-        setXrStatus("Failed to enter XR smoke test: " + error.message);
-      }
     });
 
     permissionButton.addEventListener("click", requestOrientationPermission);
     resetViewButton.addEventListener("click", resetView);
 
-    xrButton.addEventListener("click", async () => {
-      try {
-        await scene.enterVR();
-        setXrStatus("Requested XR / immersive mode");
-      } catch (error) {
-        setXrStatus("Failed to enter XR mode: " + error.message);
-      }
-    });
-
     hideUiButton.addEventListener("click", hideUi);
     showUiButton.addEventListener("click", showUi);
 
-    scene.addEventListener("enter-vr", () => {
-      isInXrMode = true;
-      setXrStatus("Scene entered XR / immersive mode");
-      if (xrSmokeMode) {
-        applyDirectDemoSky();
-        return;
-      }
-      if (currentSkyDataUrl) {
-        applyXrSnapshotToSky();
-      }
-      if (currentImageElement) {
-        window.setTimeout(() => {
-          if (currentSkyDataUrl) {
-            applyXrSnapshotToSky();
-            console.log("[image] Reapplied frozen XR snapshot after settle");
-          }
-        }, 250);
-      } else {
-        console.log("[image] No panorama selected when entering XR");
-      }
-    });
-
-    scene.addEventListener("exit-vr", () => {
-      isInXrMode = false;
-      setXrStatus("Scene exited XR / immersive mode");
-      restorePreviewAfterXr();
-    });
-
     window.addEventListener("resize", () => {
       console.log("[orientation] Window resized");
+      setOrientationStatus("Window resized. Use Recenter View if orientation feels off.");
     });
 
     setOrientationStatus("Awaiting user action");

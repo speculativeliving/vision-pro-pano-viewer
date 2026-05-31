@@ -181,7 +181,7 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v2.0.4</div>
+      <div class="versionTag" id="versionTag">v2.0.5</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
@@ -238,12 +238,25 @@
     <a-camera
       id="camera"
       position="0 1.6 0"
+      lock-horizon
       look-controls="enabled: true; magicWindowTrackingEnabled: true; pointerLockEnabled: false; mouseEnabled: true; touchEnabled: true"
       wasd-controls="enabled: false"
     ></a-camera>
   </a-scene>
 
   <script>
+    AFRAME.registerComponent("lock-horizon", {
+      tick() {
+        const lookControls = this.el.components["look-controls"];
+        if (lookControls && lookControls.yawObject) {
+          lookControls.yawObject.rotation.z = 0;
+        }
+        if (this.el.object3D) {
+          this.el.object3D.rotation.z = 0;
+        }
+      }
+    });
+
     const fileInput = document.getElementById("fileInput");
     const demoButton = document.getElementById("demoButton");
     const permissionButton = document.getElementById("permissionButton");
@@ -266,7 +279,7 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
-    const APP_VERSION = "v2.0.4";
+    const APP_VERSION = "v2.0.5";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;

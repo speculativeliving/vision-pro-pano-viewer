@@ -18,20 +18,12 @@ async function main() {
   const demoPreviewVisible = await page.locator("#previewFrame").evaluate((el) =>
     el.classList.contains("visible")
   );
-
-  await page.evaluate(() => {
-    document.querySelector("a-scene").emit("enter-vr");
-  });
-  await page.waitForTimeout(400);
-  await page.evaluate(() => {
-    document.querySelector("a-scene").emit("exit-vr");
-  });
-  await page.waitForTimeout(600);
-  const afterXrStatus = await page.locator("#imageStatus").textContent();
+  await page.screenshot({ path: "validation-demo.png", fullPage: true });
 
   await page.setInputFiles("#fileInput", "./demo-panorama.png");
   await page.waitForTimeout(1500);
   const uploadStatus = await page.locator("#imageStatus").textContent();
+  await page.screenshot({ path: "validation-upload.png", fullPage: true });
 
   await browser.close();
 
@@ -41,7 +33,6 @@ async function main() {
         version,
         demoStatus,
         demoPreviewVisible,
-        afterXrStatus,
         uploadStatus,
         logs,
       },

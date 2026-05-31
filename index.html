@@ -181,7 +181,7 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v2.0.2</div>
+      <div class="versionTag" id="versionTag">v2.0.3</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
@@ -208,7 +208,6 @@
 
   <button id="showUiButton" type="button">Show Controls</button>
   <canvas id="panoCanvas"></canvas>
-  <img id="renderedSkyImage" alt="Rendered sky texture" hidden />
 
   <a-scene
     id="scene"
@@ -260,7 +259,6 @@
     const cameraEl = document.getElementById("camera");
     const panoCanvas = document.getElementById("panoCanvas");
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
-    const renderedSkyImage = document.getElementById("renderedSkyImage");
     const versionTag = document.getElementById("versionTag");
     const previewFrame = document.getElementById("previewFrame");
     const debugPreview = document.getElementById("debugPreview");
@@ -268,7 +266,7 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
-    const APP_VERSION = "v2.0.2";
+    const APP_VERSION = "v2.0.3";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -287,12 +285,9 @@
 
     function updateSkyFromCanvasSnapshot() {
       const dataUrl = panoCanvas.toDataURL("image/jpeg", 0.92);
-      renderedSkyImage.onload = () => {
-        sky.setAttribute("material", "color", "#ffffff");
-        sky.setAttribute("src", "#renderedSkyImage");
-        console.log("[image] Updated sky from rendered image snapshot");
-      };
-      renderedSkyImage.src = dataUrl;
+      sky.setAttribute("material", "color", "#ffffff");
+      sky.setAttribute("src", dataUrl);
+      console.log("[image] Updated sky from rendered image snapshot");
     }
 
     function getSourceWidth(source) {

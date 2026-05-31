@@ -152,6 +152,29 @@
     #panoCanvas {
       display: none;
     }
+
+    #previewFrame {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    #previewFrame.visible {
+      display: block;
+    }
+
+    #previewFrame p {
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    #debugPreview {
+      display: block;
+      width: 100%;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+    }
   </style>
 </head>
 <body>
@@ -176,6 +199,10 @@
       <div><strong>XR:</strong> <span id="xrStatus">Checking support...</span></div>
       <div><strong>Image:</strong> <span id="imageStatus">No panorama loaded</span></div>
     </div>
+    <div id="previewFrame">
+      <p>Loaded image preview:</p>
+      <img id="debugPreview" alt="Loaded panorama preview" />
+    </div>
   </div>
 
   <button id="showUiButton" type="button">Show Controls</button>
@@ -196,15 +223,13 @@
       browser mode. We also clamp large images to the device's max texture size because
       very large panoramas can otherwise fail silently and appear black.
     -->
-    <a-sphere
-      id="skySphere"
+    <a-sky
+      id="sky"
       radius="5000"
-      segments-width="64"
-      segments-height="64"
       rotation="0 -90 0"
       color="#111111"
-      material="shader: flat; side: double"
-    ></a-sphere>
+      material="shader: flat"
+    ></a-sky>
 
     <!--
       Vision Pro and Mobile Safari note:
@@ -232,17 +257,18 @@
     const imageStatus = document.getElementById("imageStatus");
     const ui = document.getElementById("ui");
     const scene = document.getElementById("scene");
-    const skySphere = document.getElementById("skySphere");
+    const sky = document.getElementById("sky");
     const panoCanvas = document.getElementById("panoCanvas");
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
     const versionTag = document.getElementById("versionTag");
+    const previewFrame = document.getElementById("previewFrame");
+    const debugPreview = document.getElementById("debugPreview");
 
-    let currentPanoramaSource = null;
+    let currentImageElement = null;
     let currentPanoramaName = "";
-    let currentFileObjectUrl = null;
     let maxTextureSize = 4096;
     let panoTexture = null;
-    const APP_VERSION = "v1.0.6";
+    const APP_VERSION = "v1.1.0";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -260,9 +286,9 @@
     }
 
     function ensureCanvasTexture() {
-      const mesh = skySphere.getObject3D("mesh");
+      const mesh = sky.getObject3D("mesh");
       if (!mesh || !mesh.material) {
-        console.warn("[image] Sphere mesh is not ready yet");
+        console.warn("[image] Sky mesh is not ready yet");
         return false;
       }
 
@@ -272,10 +298,9 @@
         panoTexture.needsUpdate = true;
         mesh.material.map = panoTexture;
         mesh.material.color.set("#ffffff");
-        mesh.material.side = THREE.DoubleSide;
         mesh.material.toneMapped = false;
         mesh.material.needsUpdate = true;
-        console.log("[image] Created direct CanvasTexture for sphere");
+        console.log("[image] Created direct CanvasTexture for sky");
       }
 
       return true;
@@ -287,14 +312,14 @@
       }
 
       panoTexture.needsUpdate = true;
-      const mesh = skySphere.getObject3D("mesh");
+      const mesh = sky.getObject3D("mesh");
       if (mesh && mesh.material) {
         mesh.material.map = panoTexture;
         mesh.material.color.set("#ffffff");
         mesh.material.needsUpdate = true;
       }
 
-      console.log("[image] Updated direct CanvasTexture on sphere");
+      console.log("[image] Updated direct CanvasTexture on sky");
     }
 
     function getSourceWidth(source) {
@@ -367,32 +392,25 @@
       }
     }
 
-    function cleanupFileObjectUrl() {
-      if (currentFileObjectUrl) {
-        URL.revokeObjectURL(currentFileObjectUrl);
-        currentFileObjectUrl = null;
-      }
+    function showPreview(url) {
+      debugPreview.src = url;
+      previewFrame.classList.add("visible");
     }
 
-    function loadPanoramaFromUrl(url, filename, revokeAfterLoad) {
+    function loadPanoramaFromUrl(url, filename) {
       setImageStatus("Loading " + filename + "...");
 
       const image = new Image();
       currentPanoramaName = filename;
 
       image.onload = () => {
-        currentPanoramaSource = image;
+        currentImageElement = image;
         renderPanoramaToCanvas(image);
-        if (revokeAfterLoad) {
-          cleanupFileObjectUrl();
-        }
+        showPreview(url);
       };
 
       image.onerror = () => {
         setImageStatus("Failed to decode image: " + filename, true);
-        if (revokeAfterLoad) {
-          cleanupFileObjectUrl();
-        }
       };
 
       image.src = url;
@@ -401,23 +419,18 @@
     async function loadPanoramaFromFile(file) {
       currentPanoramaName = file.name;
       setImageStatus("Loading " + file.name + "...");
+      const reader = new FileReader();
 
-      if (window.createImageBitmap) {
-        try {
-          const bitmap = await createImageBitmap(file);
-          currentPanoramaSource = bitmap;
-          renderPanoramaToCanvas(bitmap);
-          console.log("[image] Loaded uploaded file with createImageBitmap");
-          return;
-        } catch (error) {
-          console.warn("[image] createImageBitmap failed, falling back:", error);
-        }
-      }
+      reader.onerror = () => {
+        setImageStatus("Failed to read file: " + file.name, true);
+      };
 
-      cleanupFileObjectUrl();
-      currentFileObjectUrl = URL.createObjectURL(file);
-      console.log("[image] Using uploaded file object URL fallback");
-      loadPanoramaFromUrl(currentFileObjectUrl, file.name, true);
+      reader.onload = () => {
+        console.log("[image] Loaded uploaded file as data URL");
+        loadPanoramaFromUrl(reader.result, file.name);
+      };
+
+      reader.readAsDataURL(file);
     }
 
     async function checkXrAvailability() {
@@ -528,10 +541,10 @@
 
     scene.addEventListener("enter-vr", () => {
       setXrStatus("Scene entered XR / immersive mode");
-      if (currentPanoramaSource) {
-        renderPanoramaToCanvas(currentPanoramaSource);
+      if (currentImageElement) {
+        renderPanoramaToCanvas(currentImageElement);
         window.setTimeout(() => {
-          renderPanoramaToCanvas(currentPanoramaSource);
+          renderPanoramaToCanvas(currentImageElement);
         }, 250);
       } else {
         console.log("[image] No panorama selected when entering XR");
@@ -546,7 +559,7 @@
     versionTag.textContent = APP_VERSION;
     console.log("[app] Version", APP_VERSION);
     scene.addEventListener("loaded", detectMaxTextureSize, { once: true });
-    skySphere.addEventListener("loaded", ensureCanvasTexture, { once: true });
+    sky.addEventListener("loaded", ensureCanvasTexture, { once: true });
     checkXrAvailability();
   </script>
 </body>

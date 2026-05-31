@@ -176,10 +176,9 @@
       radius="5000"
       segments-width="64"
       segments-height="64"
-      scale="-1 1 1"
       rotation="0 -90 0"
       color="#111111"
-      material="shader: flat; side: back"
+      material="shader: flat; side: double"
     ></a-sphere>
 
     <!--
@@ -213,6 +212,7 @@
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
 
     let currentImageBitmap = null;
+    let currentFileObjectUrl = null;
     let maxTextureSize = 4096;
 
     function setOrientationStatus(message) {
@@ -295,7 +295,14 @@
       }
     }
 
-    function loadPanoramaFromUrl(url, filename) {
+    function cleanupFileObjectUrl() {
+      if (currentFileObjectUrl) {
+        URL.revokeObjectURL(currentFileObjectUrl);
+        currentFileObjectUrl = null;
+      }
+    }
+
+    function loadPanoramaFromUrl(url, filename, revokeAfterLoad) {
       setImageStatus("Loading " + filename + "...");
 
       const image = new Image();
@@ -304,10 +311,16 @@
       image.onload = () => {
         renderPanoramaToCanvas(image);
         currentImageBitmap = image;
+        if (revokeAfterLoad) {
+          cleanupFileObjectUrl();
+        }
       };
 
       image.onerror = () => {
         setImageStatus("Failed to decode image: " + filename, true);
+        if (revokeAfterLoad) {
+          cleanupFileObjectUrl();
+        }
       };
 
       image.src = url;
@@ -386,23 +399,22 @@
         return;
       }
 
-      const isSupportedImage = ["image/jpeg", "image/png"].includes(file.type);
+      const lowerName = file.name.toLowerCase();
+      const isSupportedImage =
+        ["image/jpeg", "image/png"].includes(file.type) ||
+        lowerName.endsWith(".jpg") ||
+        lowerName.endsWith(".jpeg") ||
+        lowerName.endsWith(".png");
+
       if (!isSupportedImage) {
         setImageStatus("Unsupported file type: " + (file.type || "unknown"), true);
         return;
       }
 
-      const reader = new FileReader();
-
-      reader.onerror = () => {
-        setImageStatus("Failed to read file: " + file.name, true);
-      };
-
-      reader.onload = () => {
-        loadPanoramaFromUrl(reader.result, file.name);
-      };
-
-      reader.readAsDataURL(file);
+      cleanupFileObjectUrl();
+      currentFileObjectUrl = URL.createObjectURL(file);
+      console.log("[image] Using uploaded file object URL");
+      loadPanoramaFromUrl(currentFileObjectUrl, file.name, true);
     });
 
     demoButton.addEventListener("click", () => {
@@ -427,6 +439,9 @@
       setXrStatus("Scene entered XR / immersive mode");
       if (currentImageBitmap) {
         renderPanoramaToCanvas(currentImageBitmap);
+        window.setTimeout(() => {
+          renderPanoramaToCanvas(currentImageBitmap);
+        }, 250);
       } else {
         console.log("[image] No panorama selected when entering XR");
       }

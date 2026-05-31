@@ -181,18 +181,20 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v2.0.5</div>
+      <div class="versionTag" id="versionTag">v2.1.0</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
       designed for Safari on Apple Vision Pro and keeps the image local in the browser.
-      Immersive XR mode has been removed here to keep the viewer stable and predictable.
+      Experimental immersive XR mode is available as a separate optional action, while the
+      main browser preview path remains the stable default.
     </p>
     <div class="controls">
       <input id="fileInput" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
       <button id="demoButton" type="button">Load Demo Panorama</button>
       <button id="permissionButton" type="button">Request Motion Permission</button>
       <button id="resetViewButton" type="button">Recenter View</button>
+      <button id="xrButton" type="button">Enter XR (Experimental)</button>
       <button id="hideUiButton" type="button">Hide Controls</button>
     </div>
     <div id="status">
@@ -215,11 +217,13 @@
     background="color: #000000"
     renderer="antialias: true; colorManagement: true"
     xr-mode-ui="enabled: false"
+    webxr="optionalFeatures: local-floor, bounded-floor, hand-tracking; overlayElement: #ui"
   >
     <!--
       Vision Pro note:
-      This viewer is intentionally optimized for stable non-immersive browser preview
-      rather than Safari immersive mode, which is currently unreliable for this workflow.
+      This viewer is optimized for stable non-immersive browser preview. The XR button is
+      intentionally isolated so immersive mode can be tested without changing the working
+      panorama upload and rendering path.
     -->
     <a-sky
       id="sky"
@@ -261,6 +265,7 @@
     const demoButton = document.getElementById("demoButton");
     const permissionButton = document.getElementById("permissionButton");
     const resetViewButton = document.getElementById("resetViewButton");
+    const xrButton = document.getElementById("xrButton");
     const hideUiButton = document.getElementById("hideUiButton");
     const showUiButton = document.getElementById("showUiButton");
     const orientationStatus = document.getElementById("orientationStatus");
@@ -279,7 +284,7 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
-    const APP_VERSION = "v2.0.5";
+    const APP_VERSION = "v2.1.0";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -413,7 +418,29 @@
     }
 
     async function checkXrAvailability() {
-      setModeStatus("Non-immersive Safari viewer");
+      if (!navigator.xr || !navigator.xr.isSessionSupported) {
+        xrButton.disabled = true;
+        setModeStatus("Non-immersive Safari viewer");
+        console.log("[xr] WebXR API not available");
+        return;
+      }
+
+      try {
+        const immersiveVrSupported = await navigator.xr.isSessionSupported("immersive-vr");
+        if (immersiveVrSupported) {
+          xrButton.disabled = false;
+          setModeStatus("Non-immersive viewer; XR available");
+          console.log("[xr] immersive-vr is supported");
+        } else {
+          xrButton.disabled = true;
+          setModeStatus("Non-immersive viewer; XR unavailable");
+          console.log("[xr] immersive-vr is not supported");
+        }
+      } catch (error) {
+        xrButton.disabled = true;
+        setModeStatus("Non-immersive viewer; XR check failed");
+        console.log("[xr] XR availability check failed:", error.message);
+      }
     }
 
     async function requestOrientationPermission() {
@@ -511,9 +538,29 @@
 
     permissionButton.addEventListener("click", requestOrientationPermission);
     resetViewButton.addEventListener("click", resetView);
+    xrButton.addEventListener("click", async () => {
+      try {
+        await scene.enterVR();
+        setModeStatus("Entered XR (experimental)");
+        console.log("[xr] Requested scene.enterVR()");
+      } catch (error) {
+        setModeStatus("XR entry failed");
+        console.log("[xr] scene.enterVR() failed:", error.message);
+      }
+    });
 
     hideUiButton.addEventListener("click", hideUi);
     showUiButton.addEventListener("click", showUi);
+
+    scene.addEventListener("enter-vr", () => {
+      setModeStatus("Entered XR (experimental)");
+      console.log("[xr] enter-vr event");
+    });
+
+    scene.addEventListener("exit-vr", () => {
+      setModeStatus("Returned to non-immersive viewer");
+      console.log("[xr] exit-vr event");
+    });
 
     window.addEventListener("resize", () => {
       console.log("[orientation] Window resized");

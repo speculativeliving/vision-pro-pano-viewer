@@ -1,6 +1,6 @@
 # vision-pro-pano-viewer
 
-Simple A-Frame 1.6.0 panorama viewer for GitHub Pages, intended to be opened over HTTPS in Safari on Apple Vision Pro for stable non-immersive panorama preview.
+Simple A-Frame 1.6.0 panorama viewer for GitHub Pages, intended to be opened over HTTPS in Safari on Apple Vision Pro for stable non-immersive panorama preview, with an optional experimental XR entry button.
 
 Included test asset:
 
@@ -24,12 +24,13 @@ Included test asset:
 3. Then choose a local JPG or PNG panorama.
 4. Grant motion/orientation permission if Safari prompts for it.
 5. Use `Recenter View` if the orientation feels off after resizing or moving between windows.
-6. Compare sharpness and viewing behavior against your native RealityKit app.
+6. Optionally try `Enter XR (Experimental)` if your Vision Pro Safari/WebXR settings expose immersive mode.
+7. Compare sharpness and viewing behavior against your native RealityKit app.
 
 ## Notes
 
 - The page assumes standard 2:1 equirectangular panoramas, such as `8192x4096`.
 - The selected image remains local to the browser session and is loaded with `URL.createObjectURL(...)`.
 - A-Frame uses `look-controls` for orientation-driven viewing, but browser behavior on Vision Pro can differ from a native immersive app.
-- This version intentionally avoids immersive Safari XR because that path is currently unreliable for this workflow on Vision Pro.
+- The non-immersive panorama preview is the stable default path. The XR button is intentionally isolated and experimental so it does not interfere with the main viewer behavior.
 - Motion permission behavior varies across Apple platforms, so the page includes a dedicated permission button and logs the result in the browser console.

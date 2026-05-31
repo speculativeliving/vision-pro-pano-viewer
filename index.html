@@ -181,7 +181,7 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v1.1.4</div>
+      <div class="versionTag" id="versionTag">v1.1.5</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
@@ -190,6 +190,7 @@
     <div class="controls">
       <input id="fileInput" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
       <button id="demoButton" type="button">Load Demo Panorama</button>
+      <button id="xrSmokeButton" type="button">XR Smoke Test</button>
       <button id="permissionButton" type="button">Request Motion Permission</button>
       <button id="resetViewButton" type="button">Reset View</button>
       <button id="xrButton" type="button">Enter XR / Immersive Mode</button>
@@ -249,6 +250,7 @@
   <script>
     const fileInput = document.getElementById("fileInput");
     const demoButton = document.getElementById("demoButton");
+    const xrSmokeButton = document.getElementById("xrSmokeButton");
     const permissionButton = document.getElementById("permissionButton");
     const resetViewButton = document.getElementById("resetViewButton");
     const xrButton = document.getElementById("xrButton");
@@ -274,7 +276,8 @@
     let currentSkyDataUrl = null;
     let panoTexture = null;
     let isInXrMode = false;
-    const APP_VERSION = "v1.1.4";
+    let xrSmokeMode = false;
+    const APP_VERSION = "v1.1.5";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -354,6 +357,7 @@
     }
 
     function restorePreviewAfterXr() {
+      xrSmokeMode = false;
       sky.removeAttribute("src");
       if (currentImageElement) {
         renderPanoramaToCanvas(currentImageElement);
@@ -535,6 +539,19 @@
       console.log("[image] MAX_TEXTURE_SIZE =", maxTextureSize);
     }
 
+    function applyDirectDemoSky() {
+      const mesh = sky.getObject3D("mesh");
+      if (mesh && mesh.material) {
+        mesh.material.map = null;
+        mesh.material.color.set("#ffffff");
+        mesh.material.needsUpdate = true;
+      }
+
+      sky.setAttribute("material", "color", "#ffffff");
+      sky.setAttribute("src", "./demo-panorama.png");
+      console.log("[image] Applied direct demo sky for XR smoke test");
+    }
+
     function resetView() {
       if (cameraEl.object3D) {
         cameraEl.object3D.rotation.set(0, 0, 0);
@@ -591,7 +608,21 @@
     });
 
     demoButton.addEventListener("click", () => {
+      xrSmokeMode = false;
       loadPanoramaFromUrl("./demo-panorama.png", "demo-panorama.png");
+    });
+
+    xrSmokeButton.addEventListener("click", async () => {
+      try {
+        xrSmokeMode = true;
+        setImageStatus("Running XR smoke test with direct demo image...");
+        applyDirectDemoSky();
+        await scene.enterVR();
+        setXrStatus("Requested XR smoke test");
+      } catch (error) {
+        xrSmokeMode = false;
+        setXrStatus("Failed to enter XR smoke test: " + error.message);
+      }
     });
 
     permissionButton.addEventListener("click", requestOrientationPermission);
@@ -612,6 +643,10 @@
     scene.addEventListener("enter-vr", () => {
       isInXrMode = true;
       setXrStatus("Scene entered XR / immersive mode");
+      if (xrSmokeMode) {
+        applyDirectDemoSky();
+        return;
+      }
       if (currentSkyDataUrl) {
         applyXrSnapshotToSky();
       }

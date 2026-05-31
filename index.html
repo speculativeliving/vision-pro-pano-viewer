@@ -181,7 +181,7 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v2.0.0</div>
+      <div class="versionTag" id="versionTag">v2.0.2</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
@@ -208,6 +208,7 @@
 
   <button id="showUiButton" type="button">Show Controls</button>
   <canvas id="panoCanvas"></canvas>
+  <img id="renderedSkyImage" alt="Rendered sky texture" hidden />
 
   <a-scene
     id="scene"
@@ -259,6 +260,7 @@
     const cameraEl = document.getElementById("camera");
     const panoCanvas = document.getElementById("panoCanvas");
     const panoContext = panoCanvas.getContext("2d", { alpha: false });
+    const renderedSkyImage = document.getElementById("renderedSkyImage");
     const versionTag = document.getElementById("versionTag");
     const previewFrame = document.getElementById("previewFrame");
     const debugPreview = document.getElementById("debugPreview");
@@ -266,8 +268,7 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
-    let panoTexture = null;
-    const APP_VERSION = "v2.0.0";
+    const APP_VERSION = "v2.0.2";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -284,41 +285,14 @@
       console[isError ? "error" : "log"]("[image]", message);
     }
 
-    function ensureCanvasTexture() {
-      const mesh = sky.getObject3D("mesh");
-      if (!mesh || !mesh.material) {
-        console.warn("[image] Sky mesh is not ready yet");
-        return false;
-      }
-
-      if (!panoTexture) {
-        panoTexture = new THREE.CanvasTexture(panoCanvas);
-        panoTexture.colorSpace = THREE.SRGBColorSpace;
-        panoTexture.needsUpdate = true;
-        mesh.material.map = panoTexture;
-        mesh.material.color.set("#ffffff");
-        mesh.material.toneMapped = false;
-        mesh.material.needsUpdate = true;
-        console.log("[image] Created direct CanvasTexture for sky");
-      }
-
-      return true;
-    }
-
-    function updatePreviewFromCanvas() {
-      if (!ensureCanvasTexture()) {
-        return;
-      }
-
-      panoTexture.needsUpdate = true;
-      const mesh = sky.getObject3D("mesh");
-      if (mesh && mesh.material) {
-        mesh.material.map = panoTexture;
-        mesh.material.color.set("#ffffff");
-        mesh.material.needsUpdate = true;
-      }
-
-      console.log("[image] Updated live preview texture from canvas");
+    function updateSkyFromCanvasSnapshot() {
+      const dataUrl = panoCanvas.toDataURL("image/jpeg", 0.92);
+      renderedSkyImage.onload = () => {
+        sky.setAttribute("material", "color", "#ffffff");
+        sky.setAttribute("src", "#renderedSkyImage");
+        console.log("[image] Updated sky from rendered image snapshot");
+      };
+      renderedSkyImage.src = dataUrl;
     }
 
     function getSourceWidth(source) {
@@ -344,11 +318,6 @@
     }
 
     function renderPanoramaToCanvas(image) {
-      if (!ensureCanvasTexture()) {
-        window.setTimeout(() => renderPanoramaToCanvas(image), 100);
-        return;
-      }
-
       const target = fitPanoramaToTextureLimit(
         getSourceWidth(image),
         getSourceHeight(image),
@@ -358,12 +327,8 @@
       panoCanvas.width = target.width;
       panoCanvas.height = target.height;
       panoContext.clearRect(0, 0, target.width, target.height);
-      panoContext.save();
-      panoContext.translate(target.width, 0);
-      panoContext.scale(-1, 1);
       panoContext.drawImage(image, 0, 0, target.width, target.height);
-      panoContext.restore();
-      updatePreviewFromCanvas();
+      updateSkyFromCanvasSnapshot();
 
       if (target.scaled) {
         setImageStatus(
@@ -544,7 +509,6 @@
     versionTag.textContent = APP_VERSION;
     console.log("[app] Version", APP_VERSION);
     scene.addEventListener("loaded", detectMaxTextureSize, { once: true });
-    sky.addEventListener("loaded", ensureCanvasTexture, { once: true });
     checkXrAvailability();
   </script>
 </body>

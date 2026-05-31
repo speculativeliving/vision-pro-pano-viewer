@@ -201,10 +201,9 @@
       radius="5000"
       segments-width="64"
       segments-height="64"
-      scale="-1 1 1"
       rotation="0 -90 0"
       color="#111111"
-      material="shader: flat; side: front"
+      material="shader: flat; side: double"
     ></a-sphere>
 
     <!--
@@ -241,7 +240,7 @@
     let currentImageBitmap = null;
     let currentFileObjectUrl = null;
     let maxTextureSize = 4096;
-    const APP_VERSION = "v1.0.3";
+    const APP_VERSION = "v1.0.4";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -294,7 +293,11 @@
       panoCanvas.width = target.width;
       panoCanvas.height = target.height;
       panoContext.clearRect(0, 0, target.width, target.height);
+      panoContext.save();
+      panoContext.translate(target.width, 0);
+      panoContext.scale(-1, 1);
       panoContext.drawImage(image, 0, 0, target.width, target.height);
+      panoContext.restore();
       updateMaterialFromCanvas();
 
       if (target.scaled) {

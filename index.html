@@ -181,7 +181,7 @@
   <div id="ui">
     <div class="metaRow">
       <h1>Vision Pro 360 Panorama Viewer</h1>
-      <div class="versionTag" id="versionTag">v2.1.0</div>
+      <div class="versionTag" id="versionTag">v2.1.1</div>
     </div>
     <p>
       Load a local 2:1 equirectangular panorama such as 8192x4096. This page is
@@ -193,6 +193,7 @@
       <input id="fileInput" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
       <button id="demoButton" type="button">Load Demo Panorama</button>
       <button id="permissionButton" type="button">Request Motion Permission</button>
+      <button id="motionToggleButton" type="button">Disable Motion Control</button>
       <button id="resetViewButton" type="button">Recenter View</button>
       <button id="xrButton" type="button">Enter XR (Experimental)</button>
       <button id="hideUiButton" type="button">Hide Controls</button>
@@ -264,6 +265,7 @@
     const fileInput = document.getElementById("fileInput");
     const demoButton = document.getElementById("demoButton");
     const permissionButton = document.getElementById("permissionButton");
+    const motionToggleButton = document.getElementById("motionToggleButton");
     const resetViewButton = document.getElementById("resetViewButton");
     const xrButton = document.getElementById("xrButton");
     const hideUiButton = document.getElementById("hideUiButton");
@@ -284,7 +286,8 @@
     let currentImageElement = null;
     let currentPanoramaName = "";
     let maxTextureSize = 4096;
-    const APP_VERSION = "v2.1.0";
+    let motionControlEnabled = true;
+    const APP_VERSION = "v2.1.1";
 
     function setOrientationStatus(message) {
       orientationStatus.textContent = message;
@@ -299,6 +302,12 @@
     function setImageStatus(message, isError) {
       imageStatus.textContent = message;
       console[isError ? "error" : "log"]("[image]", message);
+    }
+
+    function updateMotionToggleLabel() {
+      motionToggleButton.textContent = motionControlEnabled
+        ? "Disable Motion Control"
+        : "Enable Motion Control";
     }
 
     function updateSkyFromCanvasSnapshot() {
@@ -477,6 +486,27 @@
       console.log("[image] MAX_TEXTURE_SIZE =", maxTextureSize);
     }
 
+    function setMotionControlEnabled(enabled) {
+      motionControlEnabled = enabled;
+      cameraEl.setAttribute(
+        "look-controls",
+        [
+          "enabled: true",
+          "magicWindowTrackingEnabled: " + (enabled ? "true" : "false"),
+          "pointerLockEnabled: false",
+          "mouseEnabled: true",
+          "touchEnabled: true"
+        ].join("; ")
+      );
+      updateMotionToggleLabel();
+      setOrientationStatus(
+        enabled
+          ? "Motion control enabled"
+          : "Motion control disabled; using touch/cursor look"
+      );
+      console.log("[orientation] Motion control", enabled ? "enabled" : "disabled");
+    }
+
     function resetView() {
       if (cameraEl.object3D) {
         cameraEl.object3D.rotation.set(0, 0, 0);
@@ -537,6 +567,9 @@
     });
 
     permissionButton.addEventListener("click", requestOrientationPermission);
+    motionToggleButton.addEventListener("click", () => {
+      setMotionControlEnabled(!motionControlEnabled);
+    });
     resetViewButton.addEventListener("click", resetView);
     xrButton.addEventListener("click", async () => {
       try {
@@ -568,6 +601,7 @@
     });
 
     setOrientationStatus("Awaiting user action");
+    updateMotionToggleLabel();
     versionTag.textContent = APP_VERSION;
     console.log("[app] Version", APP_VERSION);
     scene.addEventListener("loaded", detectMaxTextureSize, { once: true });
